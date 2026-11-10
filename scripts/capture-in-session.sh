@@ -13,9 +13,17 @@ set -u
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 logs="$(mktemp -d)"
 mkdir -p "$root/assets/screenshots"
-# A compositor that is still running, or its stale lock, blocks the display.
-pkill -x Hyprland; sleep 1
-rm -f "$XDG_RUNTIME_DIR"/wayland-*.lock "$XDG_RUNTIME_DIR"/wayland-[0-9]
+# Do not stop a session that is in use: on a real machine that loses work.
+if pgrep -x Hyprland >/dev/null; then
+  echo "Hyprland is running. Exit it, then run this from a text console." >&2
+  exit 1
+fi
+# A lock that no process holds is stale and blocks the display: remove it and
+# its socket. A lock that a running compositor holds stays.
+for lock in "$XDG_RUNTIME_DIR"/wayland-*.lock; do
+  [[ -e $lock ]] || continue
+  if flock -n "$lock" true; then rm -f "$lock" "${lock%.lock}"; fi
+done
 for v in wave dragon lotus; do
   cfg=$(mktemp --suffix=.lua)
   cat >"$cfg" <<EOF
